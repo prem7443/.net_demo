@@ -1,4 +1,4 @@
-name: Deploy to EC2 via SSH
+name: Deploy .NET Demo to EC2
 
 on:
   push:
@@ -7,48 +7,35 @@ on:
 
 jobs:
   deploy:
+    name: Deploy to EC2 on main branch push
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout the repository
+        uses: actions/checkout@v2
 
-    - name: Debug EC2_HOST secret
-      run: |
-        echo "EC2_HOST is: ${{ secrets.EC2_HOST }}"
+      - name: Set up SSH for EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST_DNS }}  # EC2 public DNS or IP
+          username: ${{ secrets.USERNAME }}  # EC2 username (usually 'ubuntu' or 'ec2-user')
+          key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key stored in GitHub secrets
+          script: |
+            # Update and install Docker
+            sudo apt-get update -y
+            sudo apt-get install -y docker.io
 
-    - name: SSH into EC2 and deploy
-      #uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_KEY }}
-        script: |
-          # Install Docker if not installed
-          if ! command -v docker &> /dev/null; then
-            sudo apt update
-            sudo apt install -y docker.io
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            sudo usermod -aG docker $USER
-          fi
-
-          # Install Git if not installed
-          if ! command -v git &> /dev/null; then
-            sudo apt install -y git
-          fi
-
-          # Clone or update repo
-          if [ -d ".net_demo" ]; then
-            cd .net_demo
-            git pull origin main
-          else
+            # Clone the .NET demo repository
+            cd ~
+            sudo rm -rf .net_demo  # Clean up any previous clone
             git clone https://github.com/prem7443/.net_demo.git
             cd .net_demo
-          fi
 
-          # Build and run Docker container
-          docker stop sample-container || true
-          docker rm sample-container || true
-          docker build -t sample-app:v1 .
-          docker run -d -p 5080:80 --name sample-container sample-app:v1
+            # Build the Docker image
+            sudo docker build -t sample-app:v1 .
+
+            # Remove old container if it exists
+            sudo docker rm -f sample-container || true
+
+            # Run the new container
+            sudo docker run -d -p 5080:80 --name sample-container sample-app:v1
