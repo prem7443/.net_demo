@@ -10,29 +10,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout this repo (not required, but keeps actions happy)
+    - name: Checkout this repo
       uses: actions/checkout@v3
 
-    - name: Setup SSH Access
+    - name: Setup SSH and known_hosts
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+        ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
-    - name: SSH into EC2 and deploy app
+    - name: SSH into EC2 and deploy Dockerized app
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-          # Install git and docker if not present
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@$EC2_HOST << 'EOF'
           sudo yum update -y
           sudo yum install -y git docker
           sudo service docker start
           sudo usermod -aG docker ec2-user
-
-          # Ensure Docker is running (this applies only after usermod)
           sudo systemctl enable docker
-          
-          # Clone or update the repo
+
           if [ -d ".net_demo" ]; then
             cd .net_demo
             git pull origin main
@@ -41,7 +42,6 @@ jobs:
             cd .net_demo
           fi
 
-          # Build and run Docker container
           docker stop dotnet-demo || true
           docker rm dotnet-demo || true
           docker build -t dotnet-demo .
