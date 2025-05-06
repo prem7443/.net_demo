@@ -18,7 +18,7 @@ jobs:
         echo "EC2_HOST is: ${{ secrets.EC2_HOST }}"
 
     - name: SSH into EC2 and deploy
-      uses: appleboy/ssh-action@v1.0.3
+      #uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
