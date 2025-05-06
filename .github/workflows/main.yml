@@ -1,4 +1,4 @@
-name: Deploy .NET App 
+name: Deploy to EC2 via SSH
 
 on:
   push:
@@ -10,25 +10,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout this repo
+    - name: Checkout (optional)
       uses: actions/checkout@v3
 
-    - name: Setup SSH and known_hosts
-      env:
-        EC2_HOST: ${{ secrets.EC2_HOST }}
-        EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-      
-    - name: SSH into EC2 and deploy Dockerized app
-      env:
-        EC2_HOST: ${{ secrets.EC2_HOST }}
-      run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@$EC2_HOST << 'EOF'
-          sudo yum update -y
-          sudo yum install -y git docker
-          sudo service docker start
-          sudo usermod -aG docker ec2-user
-          sudo systemctl enable docker
+    - name: SSH into EC2 and deploy
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_KEY }}
+        script: |
+          # Install Docker if not installed
+          if ! command -v docker &> /dev/null; then
+            sudo apt update
+            sudo apt install -y docker.io
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo usermod -aG docker $USER
+          fi
 
+          # Install Git if not installed
+          if ! command -v git &> /dev/null; then
+            sudo apt install -y git
+          fi
+
+          # Clone or update repo
           if [ -d ".net_demo" ]; then
             cd .net_demo
             git pull origin main
@@ -37,8 +43,8 @@ jobs:
             cd .net_demo
           fi
 
-          docker stop dotnet-demo || true
-          docker rm dotnet-demo || true
-          docker build -t dotnet-demo .
-          docker run -d --name dotnet-demo -p 80:80 dotnet-demo
-        EOF
+          # Build and run Docker container
+          docker stop sample-container || true
+          docker rm sample-container || true
+          docker build -t sample-app:v1 .
+          docker run -d -p 5080:80 --name sample-container sample-app:v1
